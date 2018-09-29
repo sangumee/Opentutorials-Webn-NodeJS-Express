@@ -5,25 +5,63 @@ let fs = require('fs');
 let path = require('path');
 let sanitizeHtml = require('sanitize-html');
 let qs = require('querystring');
+let bodyParser = require('body-parser');
 let template = require('./lib/template.js');
 
+app.use(express.static('public'));
+app.use(bodyParser.urlencoded({
+  extended: false
+}));
 
-//Route, routing
-app.get('/', (request, response) => fs.readdir('./data', function (error, filelist) {
+// Create Middleware
+app.get('*', function (request, response, next) {
+  fs.readdir('./data', function (error, filelist) {
+    request.list = filelist;
+    next();
+  })
+});
+
+// Main Page Routing
+app.get('/', (request, response) => {
   let title = 'Welcome';
   let description = 'Hello, Node.js';
-  let list = template.list(filelist);
+  let list = template.list(request.list);
   let html = template.HTML(title, list,
-    `<h2>${title}</h2>${description}`,
+    `<h2>${title}</h2>${description}
+    <img src="/images/coding.jpg" style="width:300px; display:block; margin-top:10px;" />
+    `,
     `<a href="/create">create</a>`
   );
   response.send(html);
-}))
+});
 
-//Create Module
-app.get('/create', (request, response) => fs.readdir('./data', function (error, filelist) {
+// Item Page Routing
+app.get('/page/:pageId', (request, response) => {
+  let filteredId = path.parse(request.params.pageId).base;
+  fs.readFile(`data/${filteredId}`, 'utf8', function (err, description) {
+    let title = request.params.pageId;
+    let sanitizedTitle = sanitizeHtml(title);
+    let sanitizedDescription = sanitizeHtml(description, {
+      allowedTags: ['h1']
+    });
+    let list = template.list(request.list);
+    let html = template.HTML(sanitizedTitle, list,
+      `<h2>${sanitizedTitle}</h2>${sanitizedDescription}`,
+      ` <a href="/create">create</a>
+                  <a href="/update/${sanitizedTitle}">update</a>
+                  <form action="/delete_process" method="post">
+                    <input type="hidden" name="id" value="${sanitizedTitle}">
+                    <input type="submit" value="delete">
+                  </form>`
+    );
+    response.send(html);
+  });
+});
+
+// Create Module
+app.get('/create', (request, response) => {
   let title = 'WEB - create';
-  let list = template.list(filelist);
+  let list = template.list(request.list);
   let html = template.HTML(title, list, `
             <form action="/create_process" method="post">
               <p><input type="text" name="title" placeholder="title"></p>
@@ -36,32 +74,27 @@ app.get('/create', (request, response) => fs.readdir('./data', function (error, 
             </form>
           `, '');
   response.send(html);
-}))
+});
 
+// Create Process Module
 app.post('/create_process', function (request, response) {
-  let body = '';
-  request.on('data', function (data) {
-    body = body + data;
-  });
-  request.on('end', function () {
-    let post = qs.parse(body);
-    let title = post.title;
-    let description = post.description;
-    fs.writeFile(`data/${title}`, description, 'utf8', function (err) {
-      response.writeHead(302, {
-        Location: `/page/${title}`
-      });
-      response.end();
-    })
-  });
+  let post = request.body;
+  let title = post.title;
+  let description = post.description;
+  fs.writeFile(`data/${title}`, description, 'utf8', function (err) {
+    response.writeHead(302, {
+      Location: `/page/${title}`
+    });
+    response.end();
+  })
 })
 
 // Update Module
-app.get('/update/:pageId', (request, response) => fs.readdir('./data', function (error, filelist) {
+app.get('/update/:pageId', (request, response) => {
   let filteredId = path.parse(request.params.pageId).base;
   fs.readFile(`data/${filteredId}`, 'utf8', function (err, description) {
     let title = request.params.pageId;
-    let list = template.list(filelist);
+    let list = template.list(request.list);
     let html = template.HTML(title, list,
       `
               <form action="/update_process" method="post">
@@ -79,66 +112,37 @@ app.get('/update/:pageId', (request, response) => fs.readdir('./data', function 
     );
     response.send(html);
   });
-}))
+});
 
 // Update Process Module
 app.post('/update_process', function (request, response) {
-  let body = '';
-  request.on('data', function (data) {
-    body = body + data;
-  });
-  request.on('end', function () {
-    let post = qs.parse(body);
-    let id = post.id;
-    let title = post.title;
-    let description = post.description;
-    fs.rename(`data/${id}`, `data/${title}`, function (error) {
-      fs.writeFile(`data/${title}`, description, 'utf8', function (err) {
-        response.redirect(`/page/${title}`);
-      })
-    });
-  });
-})
-
-// Delete Process
-app.post('/delete_process', function (request, response) {
-  let body = '';
-  request.on('data', function (data) {
-    body = body + data;
-  });
-  request.on('end', function () {
-    let post = qs.parse(body);
-    let id = post.id;
-    let filteredId = path.parse(id).base;
-    fs.unlink(`data/${filteredId}`, function (error) {
-      response.redirect('/');
+  let post = request.body;
+  let id = post.id;
+  let title = post.title;
+  let description = post.description;
+  fs.rename(`data/${id}`, `data/${title}`, function (error) {
+    fs.writeFile(`data/${title}`, description, 'utf8', function (err) {
+      response.redirect(`/page/${title}`);
     })
   });
 });
 
-app.get('/page/:pageId', (request, response) =>
-  fs.readdir('./data', function (error, filelist) {
-    let filteredId = path.parse(request.params.pageId).base;
-    fs.readFile(`data/${filteredId}`, 'utf8', function (err, description) {
-      let title = request.params.pageId;
-      let sanitizedTitle = sanitizeHtml(title);
-      let sanitizedDescription = sanitizeHtml(description, {
-        allowedTags: ['h1']
-      });
-      let list = template.list(filelist);
-      let html = template.HTML(sanitizedTitle, list,
-        `<h2>${sanitizedTitle}</h2>${sanitizedDescription}`,
-        ` <a href="/create">create</a>
-                  <a href="/update/${sanitizedTitle}">update</a>
-                  <form action="/delete_process" method="post">
-                    <input type="hidden" name="id" value="${sanitizedTitle}">
-                    <input type="submit" value="delete">
-                  </form>`
-      );
-      response.send(html);
-    });
-  }));
+// Delete Process Module
+app.post('/delete_process', function (request, response) {
+  let post = request.body;
+  let id = post.id;
+  let filteredId = path.parse(id).base;
+  fs.unlink(`data/${filteredId}`, function (error) {
+    response.redirect('/');
+  })
+});
 
+// Handle 404 Error
+app.use(function (req, res, next) {
+  res.status(404).send('Sorry cant find that!');
+});
+
+// Server Port
 app.listen(3000, () => console.log('Example app listening on port 3000!'))
 
 

@@ -30,44 +30,17 @@ app.get('/', (request, response) => {
     `<h2>${title}</h2>${description}
     <img src="/images/coding.jpg" style="width:300px; display:block; margin-top:10px;" />
     `,
-    `<a href="/create">create</a>`
+    `<a href="/topic/create">create</a>`
   );
   response.send(html);
 });
 
-// Item Page Routing
-app.get('/page/:pageId', (request, response, next) => {
-  let filteredId = path.parse(request.params.pageId).base;
-  fs.readFile(`data/${filteredId}`, 'utf8', function (err, description) {
-    if (err) {
-      next(err);
-    } else {
-      let title = request.params.pageId;
-      let sanitizedTitle = sanitizeHtml(title);
-      let sanitizedDescription = sanitizeHtml(description, {
-        allowedTags: ['h1']
-      });
-      let list = template.list(request.list);
-      let html = template.HTML(sanitizedTitle, list,
-        `<h2>${sanitizedTitle}</h2>${sanitizedDescription}`,
-        ` <a href="/create">create</a>
-                  <a href="/update/${sanitizedTitle}">update</a>
-                  <form action="/delete_process" method="post">
-                    <input type="hidden" name="id" value="${sanitizedTitle}">
-                    <input type="submit" value="delete">
-                  </form>`
-      );
-      response.send(html);
-    }
-  });
-});
-
 // Create Module
-app.get('/create', (request, response) => {
+app.get('/topic/create', (request, response) => {
   let title = 'WEB - create';
   let list = template.list(request.list);
   let html = template.HTML(title, list, `
-            <form action="/create_process" method="post">
+            <form action="/topic/create_process" method="post">
               <p><input type="text" name="title" placeholder="title"></p>
               <p>
                 <textarea name="description" placeholder="description"></textarea>
@@ -81,27 +54,24 @@ app.get('/create', (request, response) => {
 });
 
 // Create Process Module
-app.post('/create_process', function (request, response) {
+app.post('/topic/create_process', function (request, response) {
   let post = request.body;
   let title = post.title;
   let description = post.description;
   fs.writeFile(`data/${title}`, description, 'utf8', function (err) {
-    response.writeHead(302, {
-      Location: `/page/${title}`
-    });
-    response.end();
+    response.redirect(`/topic/${title}`)
   })
 })
 
 // Update Module
-app.get('/update/:pageId', (request, response) => {
+app.get('/topic/update/:pageId', (request, response) => {
   let filteredId = path.parse(request.params.pageId).base;
   fs.readFile(`data/${filteredId}`, 'utf8', function (err, description) {
     let title = request.params.pageId;
     let list = template.list(request.list);
     let html = template.HTML(title, list,
       `
-              <form action="/update_process" method="post">
+              <form action="/topic/update_process" method="post">
                 <input type="hidden" name="id" value="${title}">
                 <p><input type="text" name="title" placeholder="title" value="${title}"></p>
                 <p>
@@ -112,27 +82,27 @@ app.get('/update/:pageId', (request, response) => {
                 </p>
               </form>
               `,
-      `<a href="/create">create</a> <a href="/update/${title}">update</a>`
+      `<a href="/topic/create">create</a> <a href="/topic/update/${title}">update</a>`
     );
     response.send(html);
   });
 });
 
 // Update Process Module
-app.post('/update_process', function (request, response) {
+app.post('/topic/update_process', function (request, response) {
   let post = request.body;
   let id = post.id;
   let title = post.title;
   let description = post.description;
   fs.rename(`data/${id}`, `data/${title}`, function (error) {
     fs.writeFile(`data/${title}`, description, 'utf8', function (err) {
-      response.redirect(`/page/${title}`);
+      response.redirect(`/topic/${title}`);
     })
   });
 });
 
 // Delete Process Module
-app.post('/delete_process', function (request, response) {
+app.post('/topic/delete_process', function (request, response) {
   let post = request.body;
   let id = post.id;
   let filteredId = path.parse(id).base;
@@ -140,6 +110,40 @@ app.post('/delete_process', function (request, response) {
     response.redirect('/');
   })
 });
+
+// Item Page Routing
+app.get('/topic/:pageId', (request, response, next) => {
+  let filteredId = path.parse(request.params.pageId).base;
+  fs.readFile(`data/${filteredId}`, 'utf8', function (err, description) {
+    if (err) {
+      next(err);
+    } else {
+      let title = request.params.pageId;
+      let sanitizedTitle = sanitizeHtml(title);
+      let sanitizedDescription = sanitizeHtml(description, {
+        allowedTags: ['h1']
+      });
+      let list = template.list(request.list);
+      let html = template.HTML(sanitizedTitle, list,
+        `<h2>${sanitizedTitle}</h2>${sanitizedDescription}`,
+        ` <a href="/topic/create">create</a>
+                  <a href="/topic/update/${sanitizedTitle}">update</a>
+                  <form action="/topic/delete_process" method="post">
+                    <input type="hidden" name="id" value="${sanitizedTitle}">
+                    <input type="submit" value="delete">
+                  </form>`
+      );
+      response.send(html);
+    }
+  });
+});
+
+
+
+
+
+
+
 
 // Handle 404 Error
 app.use(function (req, res, next) {
